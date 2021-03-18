@@ -30,3 +30,10 @@ var createEventHandler = middlewares.InsertEndpoint(
 	[]middleware.Middleware{},
 	[]middleware.Middleware{},
 )
+
+var createMultipleEventsHandler = middlewares.InsertMultipleEndpoint(
+	"events",
+	func() interface{} { return &db.Events{} },
+	[]middleware.Middleware{},
+	[]middleware.Middleware{},
+)

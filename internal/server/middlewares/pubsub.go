@@ -48,3 +48,20 @@ func PublishInsert(collection string) middleware.Middleware {
 		}
 	}
 }
+
+func PublishMultipleInserts(collection string) middleware.Middleware {
+	return func(fn httprouter.Handle) httprouter.Handle {
+		return func(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
+			ids := r.Context().Value(MultipleInsertedIDsContextKey{}).([]uuid.UUID)
+			os := r.Context().Value(ObjectContextKey{}).(MultipleObjects).ToInterfaceArray()
+
+			for i, id := range ids {
+				msg := InsertMessage{id, os[i]}
+				if err := pubsub.PublishObject(fmt.Sprintf("insert.%s", collection), msg); err != nil {
+					logrus.Errorf("PublishObject in PublishMultipleInserts %q", err)
+				}
+			}
+			fn(w, r, p)
+		}
+	}
+}

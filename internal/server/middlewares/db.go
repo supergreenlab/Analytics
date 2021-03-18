@@ -23,6 +23,7 @@ import (
 	"net/http"
 
 	"github.com/SuperGreenLab/Analytics/internal/data/db"
+	"github.com/lib/pq"
 
 	"github.com/gofrs/uuid"
 	"github.com/julienschmidt/httprouter"
@@ -53,12 +54,80 @@ func InsertObject(collection string) middleware.Middleware {
 			sess := r.Context().Value(SessContextKey{}).(sqlbuilder.Database)
 			col := sess.Collection(collection)
 			id, err := col.Insert(o)
+			ctx := r.Context()
 			if err != nil {
+				if s, ok := o.(Syncable); ok {
+					if err, ok := err.(*pq.Error); ok && err.Code == "23505" {
+						idStruct := struct {
+							ID uuid.UUID `db:"id"`
+						}{}
+						err := sess.Select("id").From(collection).Where("syncid = ?", s.GetSyncID()).One(&idStruct)
+						if err != nil {
+							logrus.Errorf("sess.Select in MultipleInsertObjects %q - %s %+v", err, collection, o)
+							http.Error(w, err.Error(), http.StatusInternalServerError)
+							return
+						}
+						ctx = context.WithValue(r.Context(), InsertedIDContextKey{}, idStruct.ID)
+						fn(w, r.WithContext(ctx), p)
+						return
+					}
+				}
 				logrus.Errorf("Insert in InsertObject %q - %s %+v", err, collection, o)
 				http.Error(w, err.Error(), http.StatusInternalServerError)
-				return
+			} else {
+				ctx = context.WithValue(r.Context(), InsertedIDContextKey{}, uuid.FromStringOrNil(string(id.([]uint8))))
+				fn(w, r.WithContext(ctx), p)
 			}
-			ctx := context.WithValue(r.Context(), InsertedIDContextKey{}, uuid.FromStringOrNil(string(id.([]uint8))))
+		}
+	}
+}
+
+// MultipleInsertedIDsContextKey - context key which stores the inserted object's ID
+type MultipleInsertedIDsContextKey struct{}
+type MultipleInsertErrorContextKey struct{}
+
+type MultipleObjects interface {
+	ToInterfaceArray() []interface{}
+}
+
+type Syncable interface {
+	GetSyncID() uuid.UUID
+}
+
+// InsertObject - Insert the payload object to DB
+func InsertMultipleObjects(collection string) middleware.Middleware {
+	return func(fn httprouter.Handle) httprouter.Handle {
+		return func(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
+			os := r.Context().Value(ObjectContextKey{}).(MultipleObjects).ToInterfaceArray()
+			sess := r.Context().Value(SessContextKey{}).(sqlbuilder.Database)
+			col := sess.Collection(collection)
+			ids := make([]uuid.UUID, 0, len(os))
+			ctx := r.Context()
+			for _, o := range os {
+				id, err := col.Insert(o)
+				if err != nil {
+					if s, ok := o.(Syncable); ok {
+						if err, ok := err.(*pq.Error); ok && err.Code == "23505" {
+							idStruct := struct {
+								ID uuid.UUID `db:"id"`
+							}{}
+							err := sess.Select("id").From(collection).Where("syncid = ?", s.GetSyncID()).One(&idStruct)
+							if err != nil {
+								logrus.Errorf("sess.Select in MultipleInsertObjects %q - %s %+v", err, collection, o)
+								ctx = context.WithValue(ctx, MultipleInsertErrorContextKey{}, err)
+								break
+							}
+							ids = append(ids, idStruct.ID)
+							continue
+						}
+					}
+					logrus.Errorf("Insert in MultipleInsertObjects %q - %s %+v", err, collection, o)
+					ctx = context.WithValue(ctx, MultipleInsertErrorContextKey{}, err)
+					break
+				}
+				ids = append(ids, uuid.FromStringOrNil(string(id.([]uint8))))
+			}
+			ctx = context.WithValue(r.Context(), MultipleInsertedIDsContextKey{}, ids)
 			fn(w, r.WithContext(ctx), p)
 		}
 	}

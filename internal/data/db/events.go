@@ -27,6 +27,9 @@ import (
 type Event struct {
 	ID uuid.NullUUID `db:"id,omitempty" json:"id"`
 
+	SyncID uuid.UUID `db:"syncid" json:"syncid"`
+
+	SourceID  uuid.UUID `db:"sourceid" json:"sourceID"`
 	SessionID uuid.UUID `db:"sessionid" json:"sessionID"`
 	VisitorID uuid.UUID `db:"visitorid" json:"visitorID"`
 
@@ -36,4 +39,25 @@ type Event struct {
 
 	CreatedAt time.Time `db:"cat,omitempty" json:"cat"`
 	UpdatedAt time.Time `db:"uat,omitempty" json:"uat"`
+}
+
+func (e Event) GetSyncID() uuid.UUID {
+	return e.SyncID
+}
+
+type Events struct {
+	Events         []Event `json:"events"`
+	interfaceCache []interface{}
+	didCache       bool
+}
+
+func (es *Events) ToInterfaceArray() []interface{} {
+	if es.didCache {
+		return es.interfaceCache
+	}
+	es.interfaceCache = make([]interface{}, 0, len(es.Events))
+	for _, e := range es.Events {
+		es.interfaceCache = append(es.interfaceCache, e)
+	}
+	return es.interfaceCache
 }

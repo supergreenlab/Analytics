@@ -5,6 +5,9 @@ create extension if not exists "uuid-ossp";
 create table if not exists events(
   id uuid primary key default uuid_generate_v4(),
 
+  syncid uuid not null,
+
+  sourceid uuid not null,
   sessionid uuid not null,
   visitorid uuid not null,
 
@@ -13,7 +16,9 @@ create table if not exists events(
   createdat timestamptz not null,
 
   cat timestamptz default now(),
-  uat timestamptz default now()
+  uat timestamptz default now(),
+
+  constraint events_sync unique (syncid, sessionid)
 );
 
 create index e_sessionid on events (sessionid);

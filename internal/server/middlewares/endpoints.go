@@ -31,10 +31,30 @@ import (
 func OutputObjectID(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 	id := r.Context().Value(InsertedIDContextKey{}).(uuid.UUID)
 	response := struct {
-		ID string `json:"id"`
-	}{id.String()}
+		ID uuid.UUID `json:"id"`
+	}{id}
 	if err := json.NewEncoder(w).Encode(response); err != nil {
 		logrus.Errorf("json.NewEncoder in OutputObjectID %q - %+v", err, response)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+}
+
+// OutputObjectID - returns the inserted object ID
+func OutputMultipleObjectIDs(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
+	ids := r.Context().Value(MultipleInsertedIDsContextKey{}).([]uuid.UUID)
+	err := r.Context().Value(MultipleInsertErrorContextKey{})
+
+	errMsg := ""
+	if e, ok := err.(error); ok {
+		errMsg = e.Error()
+	}
+	response := struct {
+		IDs []uuid.UUID `json:"ids"`
+		Err string      `json:"error,omitempty"`
+	}{ids, errMsg}
+	if err := json.NewEncoder(w).Encode(response); err != nil {
+		logrus.Errorf("json.NewEncoder in OutputMultipleObjectIDs %q - %+v", err, response)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}

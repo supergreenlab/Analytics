@@ -28,4 +28,5 @@ func Init(router *httprouter.Router) {
 	anon := cmiddlewares.AnonStack()
 
 	router.POST("/events", anon.Wrap(createEventHandler))
+	router.POST("/events/batch", anon.Wrap(createMultipleEventsHandler))
 }

@@ -49,3 +49,29 @@ func InsertEndpoint(
 
 	return s.Wrap(OutputObjectID)
 }
+
+func InsertMultipleEndpoint(
+	collection string,
+	factory func() interface{},
+	pre []middleware.Middleware,
+	post []middleware.Middleware,
+) httprouter.Handle {
+	s := middleware.NewStack()
+
+	s.Use(DecodeJSON(factory))
+	if pre != nil {
+		for _, m := range pre {
+			s.Use(m)
+		}
+	}
+	s.Use(InsertMultipleObjects(collection))
+
+	if post != nil {
+		for _, m := range post {
+			s.Use(m)
+		}
+	}
+	s.Use(PublishMultipleInserts(collection))
+
+	return s.Wrap(OutputMultipleObjectIDs)
+}
